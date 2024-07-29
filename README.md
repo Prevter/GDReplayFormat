@@ -108,7 +108,10 @@ std::vector<std::uint8_t> macroData(fileSize);
 f.read(reinterpret_cast<char *>(macroData.data()), fileSize);
 f.close();
 
-macro = MyMacro::importData(macroData);
+std::optional<MyMacro> result = MyMacro::importData(macroData);
+if (result.has_value()) {
+    macro = result.value();
+}
 ```
 
 ### Using .gdr.json
@@ -141,7 +144,10 @@ std::vector<std::uint8_t> macroData(fileSize);
 f.read(reinterpret_cast<char *>(macroData.data()), fileSize);
 f.close();
 
-macro = MyMacro::importData(macroData);
+std::optional<MyMacro> result = MyMacro::importData(macroData);
+if (result.has_value()) {
+    macro = result.value();
+}
 ```
 
 ## Extensions
