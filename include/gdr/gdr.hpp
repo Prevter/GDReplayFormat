@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <utility>
 #include <vector>
 #include <optional>
 
@@ -14,18 +15,18 @@ struct Bot {
 	std::string name;
 	std::string version;
 
-	inline Bot(std::string const& name, std::string const& version)
-		: name(name), version(version) {}
+	inline Bot(std::string name, std::string version)
+		: name(std::move(name)), version(std::move(version)) {}
 };
 
 struct Level {
-	uint32_t id;
+	uint32_t id = 0;
 	std::string name;
 
 	Level() = default;
 
-	inline Level(std::string const& name, uint32_t id = 0)
-		: name(name), id(id) {}
+	inline Level(std::string name, uint32_t id = 0)
+		: name(std::move(name)), id(id) {}
 };
 
 class Input {
@@ -49,11 +50,11 @@ class Input {
 
 
 	inline static Input hold(int frame, int button, bool player2 = false) {
-		return Input(frame, button, player2, true);
+		return {frame, button, player2, true};
 	}
 
 	inline static Input release(int frame, int button, bool player2 = false) {
-		return Input(frame, button, player2, false);
+		return {frame, button, player2, false};
 	}
 
 	inline bool operator<(Input const& other) const {
@@ -71,7 +72,7 @@ class Replay {
 	std::string author;
 	std::string description;
 
-	float duration;
+	float duration = 0.f;
 	float gameVersion;
 	float version = 1.0;
 
@@ -87,8 +88,7 @@ class Replay {
 
 	std::vector<InputType> inputs;
 
-	uint32_t frameForTime(double time)
-	{
+	uint32_t frameForTime(double time) {
 		return static_cast<uint32_t>(time * (double)framerate);
 	}
 
@@ -100,34 +100,53 @@ class Replay {
 	Replay(std::string const& botName, std::string const& botVersion)
 		: botInfo(botName, botVersion) {}
 
-	static Self importData(std::vector<uint8_t> const& data, bool importInputs = true) {
+	static std::optional<Self> importData(std::vector<uint8_t> const& data, bool importInputs = true) {
 		Self replay;
 		json replayJson;
 
-		try {
-			replayJson = json::from_msgpack(data);
-		} catch(std::exception& e) {
-			replayJson = json::parse(data);
+		replayJson = json::from_msgpack(data, true, false);
+		if (replayJson.is_discarded()) {
+			replayJson = json::parse(data, nullptr, false);
+			if (replayJson.is_discarded()) return std::nullopt;
 		}
 
-		replay.gameVersion = replayJson["gameVersion"];
-		replay.description = replayJson["description"];
-		replay.version = replayJson["version"];
-		replay.duration = replayJson["duration"];
-		replay.botInfo.name = replayJson["bot"]["name"];
-		replay.botInfo.version = replayJson["bot"]["version"];
-		replay.levelInfo.id = replayJson["level"]["id"];
-		replay.levelInfo.name = replayJson["level"]["name"];
-		replay.author = replayJson["author"];
-		replay.seed = replayJson["seed"];
-		replay.coins = replayJson["coins"];
-		replay.ldm = replayJson["ldm"];
-		
-		if(replayJson.contains("framerate"))
+#define STRINGIFY(x) #x
+#define SAFE_ASSIGN(var) if (!replayJson.contains(STRINGIFY(var))) return std::nullopt; replay.var = replayJson[STRINGIFY(var)]
+#define SAFE_ASSIGN1(var, obj) if (!obj.contains(STRINGIFY(var))) return std::nullopt; replay.obj##Info.var = obj[STRINGIFY(var)]
+
+		if (!replayJson.contains("bot") || !replayJson["bot"].is_object())
+			return std::nullopt;
+
+		if (!replayJson.contains("level") || !replayJson["level"].is_object())
+			return std::nullopt;
+
+		SAFE_ASSIGN(gameVersion);
+		SAFE_ASSIGN(description);
+		SAFE_ASSIGN(version);
+		SAFE_ASSIGN(duration);
+
+		SAFE_ASSIGN(author);
+		SAFE_ASSIGN(seed);
+		SAFE_ASSIGN(coins);
+		SAFE_ASSIGN(ldm);
+
+		auto& bot = replayJson["bot"];
+		SAFE_ASSIGN1(name, bot);
+		SAFE_ASSIGN1(version, bot);
+
+		auto& level = replayJson["level"];
+		SAFE_ASSIGN1(id, level);
+		SAFE_ASSIGN1(name, level);
+
+#undef SAFE_ASSIGN1
+#undef SAFE_ASSIGN
+#undef STRINGIFY
+
+		if (replayJson.contains("framerate"))
 			replay.framerate = replayJson["framerate"];
 		replay.parseExtension(replayJson.get<json::object_t>());
 
-		if(!importInputs)
+		if (!importInputs)
 			return replay;
 
 		for (json const& inputJson : replayJson["inputs"]) {
@@ -172,7 +191,7 @@ class Replay {
 
 		if (exportJson) {
 			std::string replayString = replayJson.dump();
-			return std::vector<uint8_t>(replayString.begin(), replayString.end());
+			return { replayString.begin(), replayString.end() };
 		} else {
 			return json::to_msgpack(replayJson);
 		}

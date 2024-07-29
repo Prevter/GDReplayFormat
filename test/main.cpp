@@ -3,7 +3,7 @@
 using namespace gdr;
 
 struct MyInput : Input {
-	float xpos;
+	float xpos{};
 
 	MyInput() = default;
 
@@ -20,7 +20,7 @@ struct MyInput : Input {
 };
 
 struct MyReplay : Replay<MyReplay, MyInput> {
-	int attempts;
+	int attempts{};
 
 	MyReplay() : Replay("TestBot", "1.0") {}
 
@@ -40,12 +40,14 @@ int main() {
 	r.description = "we testing up in here";
 	r.attempts = 50;
 
-	r.inputs.push_back(MyInput(100, 1, false, true, 30.23));
-	r.inputs.push_back(MyInput(130, 1, false, false, 100.35));
+	r.inputs.emplace_back(100, 1, false, true, 30.23);
+	r.inputs.emplace_back(130, 1, false, false, 100.35);
 
 	std::vector<uint8_t> output = r.exportData();
 
-	r = MyReplay::importData(output);
+	auto result = MyReplay::importData(output);
+	assert(result.has_value());
+	r = result.value();
 
 	assert(r.author == "camila314");
 	assert(r.description == "we testing up in here");
